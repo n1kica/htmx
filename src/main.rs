@@ -1,58 +1,42 @@
 use axum::{
-    routing::{get, put, post},
-    http::StatusCode,
-    Json, Router, extract::{Path, Form}, response::Html,
+    routing::{get, put},
+    Router, extract::{Path, Form, Request}, response::Html,
 };
 use askama::Template;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
+use tower_http::services::ServeDir;
 
 #[tokio::main]
 async fn main() {
-    // initialize tracing
-    tracing_subscriber::fmt::init();
-
-    // build our application with routes
+    let styles = ServeDir::new("styles");
+    
     let app = Router::new()
-        .route("/", get(root))
-        .route("/users", post(create_user))
+        .route("/", get(index))
         .route("/contact/{id}", get(show_contact))
+        .route("/contact/{id}", put(update_contact))
         .route("/contact/{id}/edit", get(edit_contact))
-        .route("/contact/{id}", put(update_contact));
+        .nest_service("/styles", styles);
 
-    // run our app with hyper, listening globally on port 3000
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+    
     axum::serve(listener, app).await.unwrap();
 }
 
-// basic handler that responds with a static string
-async fn root() -> &'static str {
-    "Hello, World!"
+#[derive(Template)]
+#[template(path = "index.html")]
+struct IndexTemplate {}
+
+async fn index() -> Html<String> {
+    Html(IndexTemplate {}.render().unwrap())
 }
 
-async fn create_user(
-    Json(payload): Json<CreateUser>,
-) -> (StatusCode, Json<User>) {
-    let user = User {
-        id: 1337,
-        username: payload.username,
-    };
-    (StatusCode::CREATED, Json(user))
-}
-
-// the input to our `create_user` handler
 #[derive(Deserialize)]
-struct CreateUser {
-    username: String,
+struct Contact {
+    first_name: String,
+    last_name: String,
+    email: String,
 }
 
-// the output to our `create_user` handler
-#[derive(Serialize)]
-struct User {
-    id: u64,
-    username: String,
-}
-
-// Template for displaying contact details
 #[derive(Template)]
 #[template(path = "contact.html")]
 struct ContactTemplate {
@@ -61,48 +45,71 @@ struct ContactTemplate {
     email: String,
 }
 
-// Template for editing contact details
+impl ContactTemplate {
+    fn new(first_name: String, last_name: String, email: String) -> Self {
+        Self { first_name, last_name, email }
+    }
+}
+
+impl Default for ContactTemplate {
+    fn default() -> Self {
+        Self {
+            first_name: "Joe".to_string(),
+            last_name: "Blow".to_string(),
+            email: "joe@blow.com".to_string(),
+        }
+    }
+}
+
+#[derive(Template)]
+#[template(path = "contact_full.html")]
+struct ContactFullTemplate {
+    first_name: String,
+    last_name: String,
+    email: String,
+}
+
+impl Default for ContactFullTemplate {
+    fn default() -> Self {
+        Self {
+            first_name: "Joe".to_string(),
+            last_name: "Blow".to_string(),
+            email: "joe@blow.com".to_string(),
+        }
+    }
+}
+
 #[derive(Template)]
 #[template(path = "edit_contact.html")]
-struct EditContactTemplate {
+struct ContactEditTemplate {
     first_name: String,
     last_name: String,
     email: String,
 }
 
-// Handler to show contact details
-async fn show_contact(Path(id): Path<u32>) -> Html<String> {
-    let template = ContactTemplate {
-        first_name: "Joe".to_string(),
-        last_name: "Blow".to_string(),
-        email: "joe@blow.com".to_string(),
-    };
-    Html(template.render().unwrap())
+impl Default for ContactEditTemplate {
+    fn default() -> Self {
+        Self {
+            first_name: "Joe".to_string(),
+            last_name: "Blow".to_string(),
+            email: "joe@blow.com".to_string(),
+        }
+    }
 }
 
-// Handler to show the edit form
-async fn edit_contact(Path(id): Path<u32>) -> Html<String> {
-    let template = EditContactTemplate {
-        first_name: "Joe".to_string(),
-        last_name: "Blow".to_string(),
-        email: "joe@blow.com".to_string(),
+async fn show_contact(Path(_id): Path<u32>, request: Request) -> Html<String> {
+    let html = match request.headers().get("HX-Request") {
+        Some(_) => ContactTemplate::default().render().unwrap(),
+        None => ContactFullTemplate::default().render().unwrap(),
     };
-    Html(template.render().unwrap())
+
+    Html(html)
 }
 
-#[derive(Deserialize)]
-struct UpdateContact {
-    first_name: String,
-    last_name: String,
-    email: String,
+async fn edit_contact(Path(_id): Path<u32>) -> Html<String> {
+    Html(ContactEditTemplate::default().render().unwrap())
 }
 
-// Update the `update_contact` handler to handle form data
-async fn update_contact(Path(id): Path<u32>, Form(payload): Form<UpdateContact>) -> Html<String> {
-    let updated_contact = ContactTemplate {
-        first_name: payload.first_name,
-        last_name: payload.last_name,
-        email: payload.email,
-    };
-    Html(updated_contact.render().unwrap())
+async fn update_contact(Path(_id): Path<u32>, Form(contact): Form<Contact>) -> Html<String> {
+    Html(ContactTemplate::new(contact.first_name, contact.last_name, contact.email).render().unwrap())
 }
