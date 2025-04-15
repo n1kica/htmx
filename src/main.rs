@@ -1,7 +1,7 @@
 use axum::{
     routing::{get, put, post},
     http::StatusCode,
-    Json, Router, extract::Path, response::Html,
+    Json, Router, extract::{Path, Form}, response::Html,
 };
 use askama::Template;
 use serde::{Deserialize, Serialize};
@@ -90,7 +90,19 @@ async fn edit_contact(Path(id): Path<u32>) -> Html<String> {
     Html(template.render().unwrap())
 }
 
-// Handler to update contact details
-async fn update_contact(Path(id): Path<u32>) -> Html<&'static str> {
-    Html("<div>Contact updated successfully!</div>")
+#[derive(Deserialize)]
+struct UpdateContact {
+    first_name: String,
+    last_name: String,
+    email: String,
+}
+
+// Update the `update_contact` handler to handle form data
+async fn update_contact(Path(id): Path<u32>, Form(payload): Form<UpdateContact>) -> Html<String> {
+    let updated_contact = ContactTemplate {
+        first_name: payload.first_name,
+        last_name: payload.last_name,
+        email: payload.email,
+    };
+    Html(updated_contact.render().unwrap())
 }

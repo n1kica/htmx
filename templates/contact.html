@@ -1,6 +1,8 @@
+{% extends "base.html" %} {% block content %}
 <div hx-target="this" hx-swap="outerHTML">
   <div><label>First Name</label>: {{ first_name }}</div>
   <div><label>Last Name</label>: {{ last_name }}</div>
   <div><label>Email</label>: {{ email }}</div>
   <button hx-get="/contact/1/edit" class="btn primary">Click To Edit</button>
 </div>
+{% endblock %}
