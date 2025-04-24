@@ -71,11 +71,11 @@ struct ContactTemplate {
 }
 
 impl ContactTemplate {
-    fn new(first_name: String, last_name: String, email: String) -> Self {
+    fn new(contact: Contact) -> Self {
         Self {
-            first_name,
-            last_name,
-            email,
+            first_name: contact.first_name,
+            last_name: contact.last_name,
+            email: contact.email,
         }
     }
 }
@@ -125,9 +125,5 @@ async fn update_contact(
     Path(_id): Path<u32>,
     Form(contact): Form<Contact>,
 ) -> Result<Html<String>, AppError> {
-    let html = ContactTemplate::new(contact.first_name, contact.last_name, contact.email)
-        .as_contact()
-        .render()?;
-
-    Ok(Html(html))
+    Ok(Html(ContactTemplate::new(contact).as_contact().render()?))
 }
