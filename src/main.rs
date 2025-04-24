@@ -2,7 +2,8 @@ use askama::Template;
 use axum::{
     Router,
     extract::{Form, Path, Request},
-    response::Html,
+    http::StatusCode,
+    response::{Html, IntoResponse, Response},
     routing::{get, put},
 };
 use serde::Deserialize;
@@ -24,12 +25,34 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
+enum AppError {
+    TemplateError(askama::Error),
+}
+
+impl From<askama::Error> for AppError {
+    fn from(err: askama::Error) -> Self {
+        AppError::TemplateError(err)
+    }
+}
+
+impl IntoResponse for AppError {
+    fn into_response(self) -> Response {
+        match self {
+            AppError::TemplateError(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Template rendering failed: {}", e),
+            )
+                .into_response(),
+        }
+    }
+}
+
 #[derive(Template)]
 #[template(path = "index.html")]
 struct IndexTemplate {}
 
-async fn index() -> Html<String> {
-    Html(IndexTemplate {}.render().unwrap())
+async fn index() -> Result<Html<String>, AppError> {
+    Ok(Html(IndexTemplate {}.render()?))
 }
 
 #[derive(Deserialize)]
@@ -85,24 +108,26 @@ impl Default for ContactEditTemplate {
     }
 }
 
-async fn show_contact(Path(_id): Path<u32>, request: Request) -> Html<String> {
+async fn show_contact(Path(_id): Path<u32>, request: Request) -> Result<Html<String>, AppError> {
     let html = match request.headers().get("HX-Request") {
-        Some(_) => ContactTemplate::default().as_contact().render().unwrap(),
-        None => ContactTemplate::default().render().unwrap(),
+        Some(_) => ContactTemplate::default().as_contact().render()?,
+        None => ContactTemplate::default().render()?,
     };
 
-    Html(html)
+    Ok(Html(html))
 }
 
-async fn edit_contact(Path(_id): Path<u32>) -> Html<String> {
-    Html(ContactEditTemplate::default().render().unwrap())
+async fn edit_contact(Path(_id): Path<u32>) -> Result<Html<String>, AppError> {
+    Ok(Html(ContactEditTemplate::default().render()?))
 }
 
-async fn update_contact(Path(_id): Path<u32>, Form(contact): Form<Contact>) -> Html<String> {
-    Html(
-        ContactTemplate::new(contact.first_name, contact.last_name, contact.email)
-            .as_contact()
-            .render()
-            .unwrap(),
-    )
+async fn update_contact(
+    Path(_id): Path<u32>,
+    Form(contact): Form<Contact>,
+) -> Result<Html<String>, AppError> {
+    let html = ContactTemplate::new(contact.first_name, contact.last_name, contact.email)
+        .as_contact()
+        .render()?;
+
+    Ok(Html(html))
 }
