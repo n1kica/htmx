@@ -1,15 +1,17 @@
-use axum::{
-    routing::{get, put},
-    Router, extract::{Path, Form, Request}, response::Html,
-};
 use askama::Template;
+use axum::{
+    Router,
+    extract::{Form, Path, Request},
+    response::Html,
+    routing::{get, put},
+};
 use serde::Deserialize;
 use tower_http::services::ServeDir;
 
 #[tokio::main]
 async fn main() {
     let styles = ServeDir::new("styles");
-    
+
     let app = Router::new()
         .route("/", get(index))
         .route("/contact/{id}", get(show_contact))
@@ -18,7 +20,7 @@ async fn main() {
         .nest_service("/styles", styles);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
-    
+
     axum::serve(listener, app).await.unwrap();
 }
 
@@ -38,7 +40,7 @@ struct Contact {
 }
 
 #[derive(Template)]
-#[template(path = "contact.html")]
+#[template(path = "contact.html", blocks = ["contact"])]
 struct ContactTemplate {
     first_name: String,
     last_name: String,
@@ -47,7 +49,11 @@ struct ContactTemplate {
 
 impl ContactTemplate {
     fn new(first_name: String, last_name: String, email: String) -> Self {
-        Self { first_name, last_name, email }
+        Self {
+            first_name,
+            last_name,
+            email,
+        }
     }
 }
 
@@ -62,25 +68,7 @@ impl Default for ContactTemplate {
 }
 
 #[derive(Template)]
-#[template(path = "contact_full.html")]
-struct ContactFullTemplate {
-    first_name: String,
-    last_name: String,
-    email: String,
-}
-
-impl Default for ContactFullTemplate {
-    fn default() -> Self {
-        Self {
-            first_name: "Joe".to_string(),
-            last_name: "Blow".to_string(),
-            email: "joe@blow.com".to_string(),
-        }
-    }
-}
-
-#[derive(Template)]
-#[template(path = "edit_contact.html")]
+#[template(path = "contact_edit.html")]
 struct ContactEditTemplate {
     first_name: String,
     last_name: String,
@@ -99,8 +87,8 @@ impl Default for ContactEditTemplate {
 
 async fn show_contact(Path(_id): Path<u32>, request: Request) -> Html<String> {
     let html = match request.headers().get("HX-Request") {
-        Some(_) => ContactTemplate::default().render().unwrap(),
-        None => ContactFullTemplate::default().render().unwrap(),
+        Some(_) => ContactTemplate::default().as_contact().render().unwrap(),
+        None => ContactTemplate::default().render().unwrap(),
     };
 
     Html(html)
@@ -111,5 +99,10 @@ async fn edit_contact(Path(_id): Path<u32>) -> Html<String> {
 }
 
 async fn update_contact(Path(_id): Path<u32>, Form(contact): Form<Contact>) -> Html<String> {
-    Html(ContactTemplate::new(contact.first_name, contact.last_name, contact.email).render().unwrap())
+    Html(
+        ContactTemplate::new(contact.first_name, contact.last_name, contact.email)
+            .as_contact()
+            .render()
+            .unwrap(),
+    )
 }
